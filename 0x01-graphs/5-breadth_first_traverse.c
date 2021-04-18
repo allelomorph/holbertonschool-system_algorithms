@@ -2,36 +2,8 @@
 
 /* fprintf */
 #include <stdio.h>
-/* memset */
-#include <string.h>
-/* malloc free */
+/* calloc free */
 #include <stdlib.h>
-
-
-/**
- * inQueue - linear search to see if a vertex is in the current queue
- *
- * @queue: double pointer to the current head of a queue of vertices
- * @v: pointer to the vertex to search for
- * Return: 1 if vertex is found in queue, 0 if not or failure
- */
-int inQueue(BFS_queue_t *queue, vertex_t *v)
-{
-	BFS_queue_t *temp;
-
-	if (!queue || !v)
-		return (0);
-
-	temp = queue;
-	while (temp)
-	{
-		if (temp->v == v)
-			return (1);
-		temp = temp->next;
-	}
-
-	return (0);
-}
 
 
 /**
@@ -94,29 +66,28 @@ BFS_queue_t *addToQueue(BFS_queue_t **queue, size_t depth, vertex_t *next_v)
  *   not already visited or in the queue
  *
  * @queue: pointer to the current head of a queue of vertices
- * @visited: array of bytes indicating traversal history: if byte at a given
+ * @enqueued: array of bytes indicating traversal history: if byte at a given
  *   index is non-zero, then the vertex at the same index in the adjacency list
- *   has already been visited
+ *   has already been put into queue
  * @action: pointer to a function to be called for each visited vertex, takes
  *   the parameters:
  *      v: const pointer to the visited vertex
  *      depth: depth of v, from the starting vertex
  * Return: 0 on success, or 1 on failure
  */
-int BFS_visit(BFS_queue_t **queue, unsigned char *visited,
+int BFS_visit(BFS_queue_t **queue, unsigned char *enqueued,
 	      void (*action)(const vertex_t *v, size_t depth))
 {
 	edge_t *temp_e = NULL;
 	vertex_t *curr_v = NULL;
 	size_t curr_depth;
 
-	if (!queue || !(*queue) || !(*queue)->v || !visited || !action)
+	if (!queue || !(*queue) || !(*queue)->v || !enqueued || !action)
 		return (1);
 
 	curr_v = (*queue)->v;
 	curr_depth = (*queue)->depth;
 
-	visited[curr_v->index] = 1;
 	action(curr_v, curr_depth);
 
 	nextInQueue(queue);
@@ -124,11 +95,11 @@ int BFS_visit(BFS_queue_t **queue, unsigned char *visited,
 	temp_e = curr_v->edges;
 	while (temp_e)
 	{
-		if (!visited[temp_e->dest->index] &&
-		    !inQueue(*queue, temp_e->dest))
+		if (!enqueued[temp_e->dest->index])
 		{
 			if (!addToQueue(queue, curr_depth + 1, temp_e->dest))
 				return (1);
+			enqueued[temp_e->dest->index] = 1;
 		}
 
 		temp_e = temp_e->next;
@@ -154,38 +125,41 @@ int BFS_visit(BFS_queue_t **queue, unsigned char *visited,
 size_t breadth_first_traverse(const graph_t *graph,
 			      void (*action)(const vertex_t *v, size_t depth))
 {
-	unsigned char *visited = NULL;
+	unsigned char *enqueued = NULL;
 	BFS_queue_t *queue = NULL;
 	size_t depth = 0;
 
 	if (!graph || !action)
 		return (0);
 
-	visited = malloc(sizeof(unsigned char) * graph->nb_vertices);
-	if (!visited)
+	/*
+	 * enqueued flags indicate that a vertex was added to the queue, and
+	 * remain set after that vertex is cleared from the queue.
+	 */
+	enqueued = calloc(graph->nb_vertices, sizeof(unsigned char));
+	if (!enqueued)
 		return (0);
-	memset(visited, 0, graph->nb_vertices);
 
 	/* start queue with first vertex in adjacency list */
 	addToQueue(&queue, 0, graph->vertices);
 	if (!queue)
 	{
-		free(visited);
+		free(enqueued);
 		return (0);
 	}
 
 	while (queue)
 	{
 		depth = queue->depth;
-		if (BFS_visit(&queue, visited, action) == 1)
+		if (BFS_visit(&queue, enqueued, action) == 1)
 		{
-			free(visited);
+			free(enqueued);
 			while (queue)
 				nextInQueue(&queue);
 			return (0);
 		}
 	}
 
-	free(visited);
+	free(enqueued);
 	return (depth);
 }

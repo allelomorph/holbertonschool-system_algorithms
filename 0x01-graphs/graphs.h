@@ -107,10 +107,9 @@ size_t depth_first_traverse(const graph_t *graph,
 			    void (*action)(const vertex_t *v, size_t depth));
 
 /* task 5. Breadth-first traversal */
-int inQueue(BFS_queue_t *queue, vertex_t *v);
 void nextInQueue(BFS_queue_t **queue);
 BFS_queue_t *addToQueue(BFS_queue_t **queue, size_t depth, vertex_t *next_v);
-int BFS_visit(BFS_queue_t **queue, unsigned char *visited,
+int BFS_visit(BFS_queue_t **queue, unsigned char *enqueued,
 	      void (*action)(const vertex_t *v, size_t depth));
 size_t breadth_first_traverse(const graph_t *graph,
 			      void (*action)(const vertex_t *v, size_t depth));
