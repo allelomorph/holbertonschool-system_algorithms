@@ -22,9 +22,9 @@
  * @bit_idx: TBD
  */
 typedef struct bit_s {
-	size_t byte_idx;
+	unsigned int byte_idx;
 	unsigned char byte;
-	unsigned int bit_idx;
+	unsigned char bit_idx;
 } bit_t;
 
 /* pads out to 12 bytes if not `__attribute__((packed))` */
@@ -73,31 +73,52 @@ int huffmanDecompress(FILE *in_file, FILE *out_file, long int input_file_size);
 /* huffmanEncode.c */
 void freeCodes(char **codes, size_t freq_size);
 int encodeText(char **codes, size_t freq_size, unsigned char *r_buff,
-	       size_t read_size, unsigned char *w_buff, bit_t *w_bit);
+	       size_t read_size, FILE *out_file,
+	       unsigned char *w_buff, bit_t *w_bit);
 void buildHuffmanCodes(binary_tree_node_t *h_tree, size_t depth,
 		       size_t *i, char *code, char **codes);
 int huffmanEncode(FILE *in_file, binary_tree_node_t *h_tree, size_t freq_size,
-		  unsigned char *w_buff, bit_t *w_bit);
+		  FILE *out_file, unsigned char *w_buff, bit_t *w_bit,
+		  size_t in_file_size);
 
 /* huffmanDecode.c */
-char *decodeSingleChar(binary_tree_node_t *h_tree,
+/*
+char *decodeSingleChar(binary_tree_node_t *h_tree, FILE *in_file,
+		       unsigned char *r_buff, bit_t *r_bit, bit_t *test_bit);
+*/
+char *decodeSingleChar(binary_tree_node_t *h_tree, FILE *in_file,
 		       unsigned char *r_buff, bit_t *r_bit);
+
+/*
 int huffmanDecode(FILE *out_file, binary_tree_node_t *h_tree,
 		  huffman_header_t *header, size_t in_file_size,
-		  unsigned char *r_buff, bit_t *r_bit);
+		  FILE *in_file, unsigned char *r_buff, bit_t *r_bit, bit_t *test_bit);
+*/
+int huffmanDecode(FILE *out_file, binary_tree_node_t *h_tree,
+		  huffman_header_t *header, size_t in_file_size,
+		  FILE *in_file, unsigned char *r_buff, bit_t *r_bit);
 
 /* serialization.c */
-void huffmanSerialize(binary_tree_node_t *huffman_tree,
+void huffmanSerialize(binary_tree_node_t *huffman_tree, FILE *out_file,
 		      unsigned char *buff, bit_t *w_bit);
-binary_tree_node_t *huffmanDeserialize(unsigned char *buff, bit_t *r_bit,
+binary_tree_node_t *huffmanDeserialize(FILE *in_file, unsigned char *buff,
+				       bit_t *r_bit,
 				       binary_tree_node_t *parent);
 
 /* read_write.c */
-int readBit(unsigned char *buff, bit_t *r_bit, unsigned char *value);
-int readByte(unsigned char *buff, bit_t *r_bit, unsigned char *byte);
-int writeBit(unsigned char *buff, bit_t *w_bit, unsigned char toggle);
-int writeByte(unsigned char *buff, bit_t *w_bit, unsigned char byte);
-int writePartialByte(unsigned char *buff, bit_t *w_bit);
+/*
+int readBit(FILE *in_file, unsigned char *buff,
+	    bit_t *r_bit, unsigned char *value, bit_t *test_bit);
+*/
+int readBit(FILE *in_file, unsigned char *buff,
+	    bit_t *r_bit, unsigned char *value);
 
+int readByte(FILE *in_file, unsigned char *buff,
+	     bit_t *r_bit, unsigned char *byte);
+int writeBit(FILE *out_file, unsigned char *buff, bit_t *w_bit,
+	     unsigned char toggle);
+int writeByte(FILE *out_file, unsigned char *buff, bit_t *w_bit,
+	      unsigned char byte);
+int writePartialByte(FILE *out_file, unsigned char *buff, bit_t *w_bit);
 
 #endif /* _HUFFMAN_H */

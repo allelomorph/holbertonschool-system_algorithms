@@ -21,8 +21,9 @@ int readBit(FILE *in_file, unsigned char *buff,
 	if (test_bit)
 		printf("readBit: r_bit->byte_idx:%u r_bit->bit_idx:%u k:%lu test_bit->byte_idx:%u\n", r_bit->byte_idx, r_bit->bit_idx, k, test_bit->byte_idx);
 */
+/*
 	printf("readBit: r_bit->byte_idx:%u r_bit->bit_idx:%u \n", r_bit->byte_idx, r_bit->bit_idx);
-
+*/
 	r_bit->byte = buff[r_bit->byte_idx];
 
 	if (r_bit->byte & (1 << (7 - r_bit->bit_idx)))

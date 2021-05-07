@@ -56,7 +56,7 @@ int huffmanDecode(FILE *out_file, binary_tree_node_t *h_tree,
 {
 	unsigned char w_buff[BUF_SIZE] = {0};
 	char *c = NULL;
-	size_t i, remainder, hc_size, write_bytes, read_bytes, buffered_bytes;
+	size_t i, remainder, hc_size, write_bytes,/* read_bytes,*/ r_buffered, headerless_size;
 /*
 	fprintf(stderr, "\thuffmanDecode: out_file @ %p\n", (void *)out_file);
 	fprintf(stderr, "\thuffmanDecode: h_tree @ %p\n", (void *)h_tree);
@@ -92,23 +92,25 @@ int huffmanDecode(FILE *out_file, binary_tree_node_t *h_tree,
 	if (!(read_bytes == BUF_SIZE || read_bytes == remainder))
 	        return (1);
 */
+	headerless_size = in_file_size - sizeof(header);
 	/* for each byte in hcode (readBit updates r_buff) */
-        for (read_bytes = r_bit->byte_idx, buffered_bytes = 0, i = 0;
-	     read_bytes < in_file_size; i++)
+        for (r_buffered = 0, i = 0;
+	     (r_buffered + r_bit->byte_idx < headerless_size - 1 ||
+	      (r_buffered + r_bit->byte_idx == headerless_size - 1 &&
+	       r_bit->bit_idx < header->hc_last_bit_i)); i++)
 	{
-
+/*
 		printf("\t\titerating %lu until %lu  ", read_bytes, in_file_size);
-
+*/
 		c = decodeSingleChar(h_tree, in_file, r_buff, r_bit);
 		if (c == NULL)
 			return (1);
-		w_buff[i] = *c;
+		w_buff[i % BUF_SIZE] = *c;
 
 		if (r_bit->byte_idx == 0)
-			buffered_bytes += BUF_SIZE;
-		read_bytes = buffered_bytes + r_bit->byte_idx;
+		        r_buffered += BUF_SIZE;
 
-		if (i == BUF_SIZE)
+		if (!((i + 1) % BUF_SIZE))
 		{
 			printf("huffmanDecode: writing and refreshing w_buff\n");
 			if (fwrite(w_buff, sizeof(unsigned char),
@@ -120,14 +122,13 @@ int huffmanDecode(FILE *out_file, binary_tree_node_t *h_tree,
 /*
 	fprintf(stderr, "\thuffmanDecode 3\n");
 */
-	/* written bytes % BUF_SIZE */
-	if (i != BUF_SIZE)
+	if (i % BUF_SIZE)
 	{
 	        write_bytes = fwrite(w_buff, sizeof(unsigned char),
-				     i, out_file);
+				     i % BUF_SIZE, out_file);
 		printf("huffmanDecode: final i:%lu write_bytes: %lu\n",
 		       i, write_bytes);
-		if (write_bytes != i)
+		if (write_bytes != i % BUF_SIZE)
 			return (1);
 	}
 /*
