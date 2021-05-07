@@ -1,5 +1,6 @@
 #include "_huffman.h"
-
+/* memset */
+#include <string.h>
 
 /**
  * readBit - TBD
@@ -9,10 +10,18 @@
  * @value: TBD
  * Return: TBD
  */
-int readBit(unsigned char *buff, bit_t *r_bit, unsigned char *value)
+int readBit(FILE *in_file, unsigned char *buff,
+	    bit_t *r_bit, unsigned char *value)
 {
-	if (!buff || !r_bit || !value)
+	size_t read_bytes;
+
+	if (!in_file || !buff || !r_bit || !value)
 		return (1);
+/*
+	if (test_bit)
+		printf("readBit: r_bit->byte_idx:%u r_bit->bit_idx:%u k:%lu test_bit->byte_idx:%u\n", r_bit->byte_idx, r_bit->bit_idx, k, test_bit->byte_idx);
+*/
+	printf("readBit: r_bit->byte_idx:%u r_bit->bit_idx:%u \n", r_bit->byte_idx, r_bit->bit_idx);
 
 	r_bit->byte = buff[r_bit->byte_idx];
 
@@ -22,11 +31,24 @@ int readBit(unsigned char *buff, bit_t *r_bit, unsigned char *value)
 		*value = 0;
 
 	r_bit->bit_idx++;
+	/* zeroing out byte buffer not necessary unless in writePartialByte */
 	if (r_bit->bit_idx == 8)
 	{
 		r_bit->byte_idx++;
 		r_bit->bit_idx = 0;
+
+		if (r_bit->byte_idx == BUF_SIZE)
+		{
+			memset(buff, 0, BUF_SIZE);
+		        read_bytes = fread(buff, sizeof(unsigned char),
+					   BUF_SIZE, in_file);
+			printf("readBit: refereshing r_buff, read_bytes:%lu\n", read_bytes);
+			if (read_bytes != BUF_SIZE && !feof(in_file))
+				return (1);
+			r_bit->byte_idx = 0;
+		}
 	}
+
 
 	return (0);
 }
@@ -40,17 +62,18 @@ int readBit(unsigned char *buff, bit_t *r_bit, unsigned char *value)
  * @byte: TBD
  * Return: TBD
  */
-int readByte(unsigned char *buff, bit_t *r_bit, unsigned char *byte)
+int readByte(FILE *in_file, unsigned char *buff,
+	     bit_t *r_bit, unsigned char *byte)
 {
 	size_t i;
 	unsigned char bit_value;
 
-	if (!buff || !r_bit || !byte)
+	if (!in_file || !buff || !r_bit || !byte)
 		return (1);
 
 	for (i = 0; i < 8; i++)
 	{
-		if (readBit(buff, r_bit, &bit_value) == 1)
+		if (readBit(in_file, buff, r_bit, &bit_value) == 1)
 			return (1);
 
 		if (bit_value)
@@ -71,9 +94,10 @@ int readByte(unsigned char *buff, bit_t *r_bit, unsigned char *byte)
  * @toggle: TBD
  * Return: TBD
  */
-int writeBit(unsigned char *buff, bit_t *w_bit, unsigned char toggle)
+int writeBit(FILE *out_file, unsigned char *buff, bit_t *w_bit,
+	     unsigned char toggle)
 {
-	if (!buff || !w_bit || (toggle != 0 && toggle != 1))
+	if (!out_file || !buff || !w_bit || (toggle != 0 && toggle != 1))
 		return (1);
 
 	if (toggle)
@@ -82,15 +106,23 @@ int writeBit(unsigned char *buff, bit_t *w_bit, unsigned char toggle)
 		w_bit->byte &= ~(1 << (7 - w_bit->bit_idx));
 	w_bit->bit_idx++;
 
-	/* zeroing out byte buffer on reset should be dependent on writeByte vs writePartialByte*/
+	/* zeroing out byte buffer not necessary unless in writePartialByte */
 	if (w_bit->bit_idx == 8)
 	{
-		buff[w_bit->byte_idx] = w_bit->byte;
+	        buff[w_bit->byte_idx] = w_bit->byte;
 		w_bit->byte_idx++;
-/*
-		w_bit->byte = 0;
-*/
 		w_bit->bit_idx = 0;
+
+		if (w_bit->byte_idx == BUF_SIZE)
+		{
+			if (fwrite(buff, sizeof(unsigned char), BUF_SIZE,
+				   out_file) != BUF_SIZE)
+				return (1);
+			memset(buff, 0, BUF_SIZE);
+			w_bit->byte_idx = 0;
+			printf("writeBit: refereshing w_buff\n");
+
+		}
 	}
 
 	return (0);
@@ -105,11 +137,12 @@ int writeBit(unsigned char *buff, bit_t *w_bit, unsigned char toggle)
  * @byte: TBD
  * Return: TBD
  */
-int writeByte(unsigned char *buff, bit_t *w_bit, unsigned char byte)
+int writeByte(FILE *out_file, unsigned char *buff, bit_t *w_bit,
+	      unsigned char byte)
 {
 	size_t i;
 
-	if (!buff || !w_bit)
+	if (!out_file || !buff || !w_bit)
 		return (1);
 /*
 	if ((char)byte < ' ' || (char)byte > '~')
@@ -119,7 +152,7 @@ int writeByte(unsigned char *buff, bit_t *w_bit, unsigned char byte)
 */
 	for (i = 0; i < 8; i++)
 	{
-		if (writeBit(buff, w_bit,
+		if (writeBit(out_file, buff, w_bit,
 			     (byte & (1 << (7 - i))) ? 1 : 0) == 1)
 			return (1);
 	}
@@ -137,12 +170,12 @@ int writeByte(unsigned char *buff, bit_t *w_bit, unsigned char byte)
  * @w_bit: TBD
  * Return: TBD
  */
-int writePartialByte(unsigned char *buff, bit_t *w_bit)
+int writePartialByte(FILE *out_file, unsigned char *buff, bit_t *w_bit)
 {
 	unsigned int orig_bit_i;
 	size_t i;
 
-	if (!buff || !w_bit)
+	if (!out_file || !buff || !w_bit)
 		return (1);
 
 	if (w_bit->bit_idx != 0)
@@ -154,13 +187,13 @@ int writePartialByte(unsigned char *buff, bit_t *w_bit)
 		orig_bit_i = w_bit->bit_idx;
 		w_bit->bit_idx = 0;
 		/* zero-padded by unassigned bits to left */
-		writeByte(buff, w_bit, w_bit->byte);
+		writeByte(out_file, buff, w_bit, w_bit->byte);
 		/* reset to original values */
 		w_bit->bit_idx = orig_bit_i;
 		w_bit->byte_idx -= 1;
 	}
 
-	printf("\twritePartialByte exit: w_bit byte_idx:%lu bit_idx:%u\n", w_bit->byte_idx, w_bit->bit_idx);
+	printf("\twritePartialByte exit: w_bit byte_idx:%u bit_idx:%u\n", w_bit->byte_idx, w_bit->bit_idx);
 
 	return (0);
 }

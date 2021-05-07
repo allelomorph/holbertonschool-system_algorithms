@@ -7,6 +7,8 @@
 #include <stdio.h>
 /* memset */
 #include <string.h>
+/* offsetof */
+#include <stddef.h>
 
 /* symbol_t */
 #include "huffman.h"
@@ -196,7 +198,7 @@ int huffmanCompress(FILE *in_file, FILE *out_file, long int in_file_size)
 	bit_t w_bit = {0, 0, 0};
 	huffman_header_t header = {"\177HUF", 0, 0, 0};
 	binary_tree_node_t *h_tree = NULL;
-	size_t freq_size = 0;
+	size_t freq_size = 0, write_bytes = 0;
 
 	if (!in_file || !out_file || in_file_size < 0)
 		return (1);
@@ -208,41 +210,54 @@ int huffmanCompress(FILE *in_file, FILE *out_file, long int in_file_size)
 
 	binary_tree_print(h_tree, symbol_print);
 
-	huffmanSerialize(h_tree, w_buff, &w_bit);
+	huffmanSerialize(h_tree, out_file, w_buff, &w_bit);
 	/* max leaves in tree 256, serialized tree not likely to be more than roughly 2 * 256 bytes */
 	/* if partial byte reamins, write to last byte in buffer */
-	if (writePartialByte(w_buff, &w_bit) == 1)
+	if (writePartialByte(out_file, w_buff, &w_bit) == 1)
 	{
 		binaryTreeDelete(h_tree, freeSymbol);
 		return (1);
 	}
 
-	printf("huffmanCompress: after writing tree: w_bit.byte_idx:%lu w_bit.bit_idx:%u\n",
+	printf("huffmanCompress: after writing tree: w_bit.byte_idx:%u w_bit.bit_idx:%u\n",
 	       w_bit.byte_idx, w_bit.bit_idx);
 
 	printf("w_buff[w_bit.byte_idx]:%x\n", w_buff[w_bit.byte_idx]);
 
-	/* huffman code starts at bit after serialized tree */
+	/* write partial header to file */
 	header.hc_byte_offset = sizeof(huffman_header_t) + w_bit.byte_idx;
         header.hc_first_bit_i = w_bit.bit_idx;
-
-	if (huffmanEncode(in_file, h_tree, freq_size, w_buff, &w_bit) == 1 ||
-	    writePartialByte(w_buff, &w_bit) == 1)
+        if (fwrite(&header, sizeof(huffman_header_t), 1, out_file) != 1)
 	{
 		binaryTreeDelete(h_tree, freeSymbol);
 		return (1);
 	}
 
-        header.hc_last_bit_i = w_bit.bit_idx;
+	if (huffmanEncode(in_file, h_tree, freq_size, out_file,
+			  w_buff, &w_bit, (size_t)in_file_size))
+	{
+		binaryTreeDelete(h_tree, freeSymbol);
+		return (1);
+	}
 	binaryTreeDelete(h_tree, freeSymbol);
 
-	/* write header to file */
-        if (fwrite(&header, sizeof(huffman_header_t), 1, out_file) != 1)
-		return (1);
+	/* write only/last buffer to file */
+	if (!(w_bit.byte_idx == 0 && w_bit.bit_idx == 0))
+	{
+		write_bytes = fwrite(w_buff, sizeof(unsigned char),
+				     w_bit.byte_idx + 1, out_file);
 
-	/* write serialized tree and encoded teto file */
-        if (fwrite(w_buff, sizeof(unsigned char), w_bit.byte_idx + 1,
-		   out_file) != w_bit.byte_idx + 1)
+		printf("huffmanCompress: wrote last w_buff bytes:%lu\n", write_bytes);
+
+		if (write_bytes != w_bit.byte_idx + 1)
+			return (1);
+	}
+
+	/* write hc end index to header after encoding */
+	if (fseek(out_file, offsetof(huffman_header_t, hc_last_bit_i),
+		  SEEK_SET) != 0 ||
+	    fwrite(&(w_bit.bit_idx), sizeof(unsigned char),
+		   1, out_file) != 1)
 		return (1);
 
 	return (0);

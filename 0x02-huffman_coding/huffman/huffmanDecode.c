@@ -17,24 +17,25 @@
  * @w_bit: TBD
  * Return: TBD
  */
-char *decodeSingleChar(binary_tree_node_t *h_tree,
+char *decodeSingleChar(binary_tree_node_t *h_tree, FILE *in_file,
 		       unsigned char *r_buff, bit_t *r_bit)
 {
 	unsigned char bit;
 
-	if (!h_tree || !r_buff || !r_bit)
+	if (!h_tree || !in_file || !r_buff || !r_bit)
 		return (NULL);
 
 	if (!h_tree->left && !h_tree->right)
 		return ((char *)(h_tree->data));
 
-	if (readBit(r_buff, r_bit, &bit) == 1)
+	if (readBit(in_file, r_buff, r_bit, &bit) == 1)
 		return (NULL);
 
 	if (bit == 0)
-		return (decodeSingleChar(h_tree->left, r_buff, r_bit));
+		return (decodeSingleChar(h_tree->left,
+					 in_file, r_buff, r_bit));
 
-	return (decodeSingleChar(h_tree->right, r_buff, r_bit));
+	return (decodeSingleChar(h_tree->right, in_file, r_buff, r_bit));
 }
 
 
@@ -51,59 +52,86 @@ char *decodeSingleChar(binary_tree_node_t *h_tree,
  */
 int huffmanDecode(FILE *out_file, binary_tree_node_t *h_tree,
 		  huffman_header_t *header, size_t in_file_size,
-		  unsigned char *r_buff, bit_t *r_bit)
+		  FILE *in_file, unsigned char *r_buff, bit_t *r_bit)
 {
 	unsigned char w_buff[BUF_SIZE] = {0};
 	char *c = NULL;
-	size_t i = 0, size_minus_header, read_bytes;
+	size_t i, remainder, hc_size, write_bytes, read_bytes, buffered_bytes;
+/*
+	fprintf(stderr, "\thuffmanDecode: out_file @ %p\n", (void *)out_file);
+	fprintf(stderr, "\thuffmanDecode: h_tree @ %p\n", (void *)h_tree);
+	fprintf(stderr, "\thuffmanDecode: header @ %p\n", (void *)header);
+	fprintf(stderr, "\thuffmanDecode: in_file @ %p\n", (void *)in_file);
+	fprintf(stderr, "\thuffmanDecode: r_file @ %p\n", (void *)r_buff);
+	fprintf(stderr, "\thuffmanDecode: r_bit @ %p\n\n", (void *)r_bit);
 
-	if (!out_file || !h_tree || !header || !r_buff || !r_bit)
-		return (1);
+	fprintf(stderr, "\thuffmanDecode: w_buff @ %p\n", (void *)&w_buff);
+	fprintf(stderr, "\thuffmanDecode: c @ %p\n", (void *)c);
+	fprintf(stderr, "\thuffmanDecode: i @ %p\n", (void *)&i);
+	fprintf(stderr, "\thuffmanDecode: j @ %p\n", (void *)&j);
+	fprintf(stderr, "\thuffmanDecode: remainder @ %p\n", (void *)&remainder);
+	fprintf(stderr, "\thuffmanDecode: hc_size @ %p\n", (void *)&hc_size);
+	fprintf(stderr, "\thuffmanDecode: write_bytes @ %p\n", (void *)&write_bytes);
+*/
 
-	size_minus_header = in_file_size - sizeof(*header);
-
-	printf("huffmanDecode: size_minus_header:%lu header->hc_last_bit_i:%u header->hc_byte_offset:%u header->hc_first_bit_i:%u\n",
-	       size_minus_header, header->hc_last_bit_i, header->hc_byte_offset, header->hc_first_bit_i);
-
-	printf("huffmanDecode: r_bit->byte_idx:%lu r_bit->bit_idx:%u\n",
-	       r_bit->byte_idx, r_bit->bit_idx);
-
-	while (r_bit->byte_idx < size_minus_header - 1 ||
-	       (r_bit->byte_idx == size_minus_header - 1 &&
-		r_bit->bit_idx < header->hc_last_bit_i))
+	if (!out_file || !h_tree || !header || !in_file || !r_buff || !r_bit)
+ 		return (1);
+/*
+	fprintf(stderr, "\thuffmanDecode 1\n");
+*/
+	hc_size = in_file_size - header->hc_byte_offset;
+	remainder = hc_size % BUF_SIZE;
+	printf("\thuffmanDecode: in_file_size:%lu header->hc_byte_offset:%u hc_size:%lu remainder:%lu\n", in_file_size, header->hc_byte_offset, hc_size, remainder);
+/*
+	fprintf(stderr, "\thuffmanDecode 2\n");
+*/
+/*
+	read_bytes = fread(r_buff, sizeof(unsigned char),
+			   BUF_SIZE, in_file);
+	printf("\thuffmanDecode: first read from encoded input read_bytes:%lu\n", read_bytes);
+	if (!(read_bytes == BUF_SIZE || read_bytes == remainder))
+	        return (1);
+*/
+	/* for each byte in hcode (readBit updates r_buff) */
+        for (read_bytes = r_bit->byte_idx, buffered_bytes = 0, i = 0;
+	     read_bytes < in_file_size; i++)
 	{
-		c = decodeSingleChar(h_tree, r_buff, r_bit);
+
+		printf("\t\titerating %lu until %lu  ", read_bytes, in_file_size);
+
+		c = decodeSingleChar(h_tree, in_file, r_buff, r_bit);
 		if (c == NULL)
 			return (1);
-
 		w_buff[i] = *c;
-		i++;
+
+		if (r_bit->byte_idx == 0)
+			buffered_bytes += BUF_SIZE;
+		read_bytes = buffered_bytes + r_bit->byte_idx;
 
 		if (i == BUF_SIZE)
 		{
-			printf("huffmanDecode: writing and refreshing buffer\n");
-
+			printf("huffmanDecode: writing and refreshing w_buff\n");
 			if (fwrite(w_buff, sizeof(unsigned char),
 				   BUF_SIZE, out_file) != BUF_SIZE)
 				return (1);
-
-			i = 0;
 			memset(w_buff, 0, BUF_SIZE);
 		}
 	}
-	printf("huffmanDecode: i after decode loop: %lu\n", i);
-
-
-	/* file bytes % BUF_SIZE */
+/*
+	fprintf(stderr, "\thuffmanDecode 3\n");
+*/
+	/* written bytes % BUF_SIZE */
 	if (i != BUF_SIZE)
 	{
-	        read_bytes = fwrite(w_buff, sizeof(unsigned char),
-				    i, out_file);
-		printf("huffmanDecode: last read read_bytes: %lu\n", read_bytes);
-
-		if (read_bytes != i)
+	        write_bytes = fwrite(w_buff, sizeof(unsigned char),
+				     i, out_file);
+		printf("huffmanDecode: final i:%lu write_bytes: %lu\n",
+		       i, write_bytes);
+		if (write_bytes != i)
 			return (1);
 	}
-
+/*
+	fprintf(stderr, "\thuffmanDecode 4\n");
+*/
 	return (0);
 }

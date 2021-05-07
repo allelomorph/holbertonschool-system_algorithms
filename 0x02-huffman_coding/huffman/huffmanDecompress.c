@@ -53,6 +53,25 @@ void freeChar(void *data)
 }
 
 
+void decompressCleanup(unsigned char *r_buff, bit_t *r_bit,
+			  huffman_header_t *header, binary_tree_node_t *h_tree)
+{
+	/* explicit NULL check since allocated with calloc */
+
+	if (r_buff != NULL)
+		free(r_buff);
+
+	if (r_bit != NULL)
+		free(r_bit);
+
+	if (header != NULL)
+		free(header);
+
+	if (h_tree)
+		binaryTreeDelete(h_tree, freeChar);
+}
+
+
 /**
  * huffmanDecompress - TBD
  *
@@ -62,21 +81,29 @@ void freeChar(void *data)
  */
 int huffmanDecompress(FILE *in_file, FILE *out_file, long int in_file_size)
 {
-	unsigned char r_buff[BUF_SIZE] = {0};
-	bit_t r_bit = {0, 0, 0};
-	huffman_header_t header;
+	unsigned char *r_buff = NULL;
+	bit_t *r_bit = NULL;
+	huffman_header_t *header = NULL;
 	binary_tree_node_t *h_tree = NULL;
-	size_t read_bytes;
+	size_t read_bytes = 0;
 
 	if (!in_file || !out_file || in_file_size < 0)
 		return (1);
 
-	if (fread(&header, sizeof(huffman_header_t), 1, in_file) != 1)
+	r_buff = calloc(BUF_SIZE, sizeof(unsigned char));
+	r_bit = calloc(1, sizeof(bit_t));
+	header = calloc(1, sizeof(huffman_header_t));
+	if (r_buff == NULL || r_bit == NULL || header == NULL)
+	{
+		decompressCleanup(r_buff, r_bit, header, h_tree);
 		return (1);
-
-	if (strncmp((char *)(header.huff_id), "\177HUF", 4) != 0)
+	}
+	if (fread(header, sizeof(huffman_header_t), 1, in_file) != 1)
+		return (1);
+	if (strncmp((char *)(header->huff_id), "\177HUF", 4) != 0)
 	{
 		printf("Input is not a file compressed by this program!\n");
+		decompressCleanup(r_buff, r_bit, header, h_tree);
 		return (1);
 	}
 
@@ -85,19 +112,31 @@ int huffmanDecompress(FILE *in_file, FILE *out_file, long int in_file_size)
 			   BUF_SIZE, in_file);
 	printf("\tread_bytes from compressed file:%lu\n", read_bytes);
 
-	h_tree = huffmanDeserialize(r_buff, &r_bit, NULL);
+	h_tree = huffmanDeserialize(in_file, r_buff, r_bit, NULL);
 	if (!h_tree)
-		return (1);
-
-	binary_tree_print(h_tree, char_print);
-
-	if (huffmanDecode(out_file, h_tree, &header, (size_t)in_file_size,
-			  r_buff, &r_bit) == 1)
 	{
-		binaryTreeDelete(h_tree, freeChar);
+		decompressCleanup(r_buff, r_bit, header, h_tree);
 		return (1);
 	}
-	binaryTreeDelete(h_tree, freeChar);
+	binary_tree_print(h_tree, char_print);
+#ifdef ZZZ
+	/* reset read buffer to begin intake at start of encoded text */
+	if (fseek(in_file, sizeof(header) + r_bit->byte_idx, SEEK_SET) != 0)
+	{
+		decompressCleanup(r_buff, r_bit, header, h_tree);
+		return (1);
+	}
 
+	r_bit->byte_idx = 0; /* bit index still needed */
+	memset(r_buff, 0, BUF_SIZE);
+#endif
+	if (huffmanDecode(out_file, h_tree, header, (size_t)in_file_size,
+			  in_file, r_buff, r_bit) == 1)
+	{
+		decompressCleanup(r_buff, r_bit, header, h_tree);
+		return (1);
+	}
+
+	decompressCleanup(r_buff, r_bit, header, h_tree);
 	return (0);
 }

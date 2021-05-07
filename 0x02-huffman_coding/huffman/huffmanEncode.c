@@ -38,7 +38,8 @@ void freeCodes(char **codes, size_t freq_size)
  * @w_bit: TBD
  */
 int encodeText(char **codes, size_t freq_size, unsigned char *r_buff,
-	       size_t read_size, unsigned char *w_buff, bit_t *w_bit)
+	       size_t read_size, FILE *out_file,
+	       unsigned char *w_buff, bit_t *w_bit)
 {
 	size_t i, j, k;
 	char *code = NULL;
@@ -46,7 +47,7 @@ int encodeText(char **codes, size_t freq_size, unsigned char *r_buff,
 /*
 	static size_t ii;
 */
-	if (!codes || !r_buff || !w_buff || !w_bit)
+	if (!codes || !r_buff || !out_file || !w_buff || !w_bit)
 		return (1);
 /*
 	if (ii == 0)
@@ -71,9 +72,11 @@ int encodeText(char **codes, size_t freq_size, unsigned char *r_buff,
 				for (k = 0; code[k]; k++)
 				{
 					if (code[k] == '0')
-						writeBit(w_buff, w_bit, 0);
+						writeBit(out_file, w_buff,
+							 w_bit, 0);
 					else
-						writeBit(w_buff, w_bit, 1);
+						writeBit(out_file, w_buff,
+							 w_bit, 1);
 				}
 
 				break;
@@ -140,14 +143,15 @@ void buildHuffmanCodes(binary_tree_node_t *h_tree, size_t depth,
  * @w_bit: TBD
  */
 int huffmanEncode(FILE *in_file, binary_tree_node_t *h_tree, size_t freq_size,
-		  unsigned char *w_buff, bit_t *w_bit)
+		  FILE *out_file, unsigned char *w_buff, bit_t *w_bit,
+		  size_t in_file_size)
 {
 	char **codes = NULL;
 	char *code = NULL;
-	size_t i = 0, read_bytes;
+	size_t i = 0, read_bytes, remainder;
 	unsigned char r_buff[BUF_SIZE] = {0};
 
-	if (!in_file || !h_tree || !w_buff || !w_bit)
+	if (!in_file || !h_tree || !out_file || !w_buff || !w_bit)
 		return (1);
 
 	code = calloc(freq_size, sizeof(char));
@@ -172,19 +176,29 @@ int huffmanEncode(FILE *in_file, binary_tree_node_t *h_tree, size_t freq_size,
 	for (i = 0; i < freq_size; i++)
 		printf("\tcodes[%lu]: %s\n", i, codes[i]);
 
-	/* need buffer overrun solution */
-	read_bytes = fread(r_buff, sizeof(unsigned char),
-			   BUF_SIZE, in_file);
+	remainder = in_file_size % BUF_SIZE;
+        do {
+		read_bytes = fread(r_buff, sizeof(unsigned char),
+				   BUF_SIZE, in_file);
 
-	printf("\thuffmanEncode: read_bytes from text input:%lu\n", read_bytes);
+		printf("\thuffmanEncode: read_bytes from text input:%lu reaminder:%lu\n", read_bytes, remainder);
 
-	if (encodeText(codes, freq_size, r_buff, read_bytes,
-		       w_buff, w_bit) == 1)
-	{
-		freeCodes(codes, freq_size);
-		return (1);
-	}
+		if (!(read_bytes == BUF_SIZE || read_bytes == remainder))
+			break;
+
+		if (encodeText(codes, freq_size, r_buff, read_bytes,
+			       out_file, w_buff, w_bit) == 1)
+			break;
+
+	} while (read_bytes == BUF_SIZE);
 
 	freeCodes(codes, freq_size);
+
+	if (!feof(in_file))
+		return (1);
+
+	if (writePartialByte(out_file, w_buff, w_bit) == 1)
+		return (1);
+
 	return (0);
 }
